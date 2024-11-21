@@ -58,11 +58,15 @@ parser.add_argument('--single_s', default=True, action=argparse.BooleanOptionalA
 parser.add_argument('--temp', default=0.5, type=float)
 parser.add_argument('--N', default=1281167, type=float)
 
+parser.add_argument('--method', default="saclrall", type=str, choices=["saclrall", "barlowtwins"])
+
 
 def main():
     args = parser.parse_args()
 
     args.s_init = args.N**(-2.0) * 10**args.s_init_t
+
+    print(args)
 
     args.ngpus_per_node = torch.cuda.device_count()
     if 'SLURM_JOB_ID' in os.environ:
@@ -101,9 +105,16 @@ def main_worker(gpu, args):
     torch.cuda.set_device(gpu)
     torch.backends.cudnn.benchmark = True
 
+    if args.method == "saclrall":
     #model = BarlowTwins(args).cuda(gpu)
     #model = SACLRLoss(args).cuda(gpu)
-    model = SACLRAll(args).cuda(gpu)
+        model = SACLRAll(args).cuda(gpu)
+        print(model)
+    elif args.method == "barlowtwins":
+        model = BarlowTwins(args).cuda(gpu)
+        print(model)
+    else:
+        raise ValueError("error method")
     model = nn.SyncBatchNorm.convert_sync_batchnorm(model)
     param_weights = []
     param_biases = []
@@ -152,7 +163,10 @@ def main_worker(gpu, args):
             adjust_learning_rate(args, optimizer, loader, step)
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
-                loss = model.forward(y1, y2, idx)
+                if args.method == "saclrall":
+                    loss = model.forward(y1, y2, idx)
+                else:
+                    loss = model.forward(y1, y2)
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()

@@ -32,7 +32,7 @@ class SACLRAll(nn.Module):
         self.distributed = args.distributed
 
 
-    def forward(self, y1, y2, feats_idx=0):
+    def forward(self, y1, y2, feats_idx):
         feats_a = self.projector(self.backbone(y1))
         feats_b = self.projector(self.backbone(y2))
         
