@@ -79,6 +79,7 @@ def main_worker(gpu, args):
     torch.backends.cudnn.benchmark = True
 
     model = models.resnet50().cuda(gpu)
+    model.fc = nn.Linear(2048, 100).cuda(gpu)
     state_dict = torch.load(args.pretrained, map_location='cpu')
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     assert missing_keys == ['fc.weight', 'fc.bias'] and unexpected_keys == []
@@ -104,17 +105,19 @@ def main_worker(gpu, args):
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
 
     # automatically resume from checkpoint if it exists
-    if (args.checkpoint_dir / 'checkpoint.pth').is_file():
-        ckpt = torch.load(args.checkpoint_dir / 'checkpoint.pth',
-                          map_location='cpu')
-        start_epoch = ckpt['epoch']
-        best_acc = ckpt['best_acc']
-        model.load_state_dict(ckpt['model'])
-        optimizer.load_state_dict(ckpt['optimizer'])
-        scheduler.load_state_dict(ckpt['scheduler'])
-    else:
-        start_epoch = 0
-        best_acc = argparse.Namespace(top1=0, top5=0)
+    #if (args.checkpoint_dir / 'checkpoint.pth').is_file():
+    #    ckpt = torch.load(args.checkpoint_dir / 'checkpoint.pth',
+    #                      map_location='cpu')
+    #    start_epoch = ckpt['epoch']
+    #    best_acc = ckpt['best_acc']
+    #    model.load_state_dict(ckpt['model'])
+    #    optimizer.load_state_dict(ckpt['optimizer'])
+    #    scheduler.load_state_dict(ckpt['scheduler'])
+    #else:
+    #    start_epoch = 0
+    #    best_acc = argparse.Namespace(top1=0, top5=0)
+    start_epoch = 0
+    best_acc = argparse.Namespace(top1=0, top5=0)
 
     # Data loading code
     traindir = args.data / 'train'

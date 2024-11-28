@@ -21,7 +21,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 
-from saclr import SACLRLoss
+from saclr1 import SACLR1
 from saclr_par import SACLRAll
 from utils import ImageNetIndex
 
@@ -56,9 +56,9 @@ parser.add_argument('--alpha', default=0.125, type=float)
 parser.add_argument('--s_init_t', default=2.0, type=float)
 parser.add_argument('--single_s', default=True, action=argparse.BooleanOptionalAction)
 parser.add_argument('--temp', default=0.5, type=float)
-parser.add_argument('--N', default=1281167, type=float)
+parser.add_argument('--N', default=1281167, type=int)
 
-parser.add_argument('--method', default="saclrall", type=str, choices=["saclrall", "barlowtwins"])
+parser.add_argument('--method', default="saclrall", type=str, choices=["saclrall", "barlowtwins", "saclr1"])
 
 
 def main():
@@ -109,7 +109,17 @@ def main_worker(gpu, args):
     #model = BarlowTwins(args).cuda(gpu)
     #model = SACLRLoss(args).cuda(gpu)
         model = SACLRAll(args).cuda(gpu)
-        print(model)
+        print(model.s_inv)
+        print(model.rho)
+        print(model.alpha)
+        #for name, buffer in model.named_buffers(): print(name, buffer)
+    elif args.method == "saclr1":
+        model = SACLR1(args).cuda(gpu)
+        #for name, buffer in model.named_buffers(): print(name, buffer)
+        #print(model)
+        print(model.s_inv)
+        print(model.rho)
+        print(model.alpha)
     elif args.method == "barlowtwins":
         model = BarlowTwins(args).cuda(gpu)
         print(model)
@@ -129,6 +139,8 @@ def main_worker(gpu, args):
                      weight_decay_filter=True,
                      lars_adaptation_filter=True)
 
+    print(optimizer)
+    
     # automatically resume from checkpoint if it exists
     #if (args.checkpoint_dir / 'checkpoint.pth').is_file():
     #    ckpt = torch.load(args.checkpoint_dir / 'checkpoint.pth',
@@ -160,13 +172,19 @@ def main_worker(gpu, args):
         for step, ((y1, y2), _, idx) in enumerate(loader, start=epoch * len(loader)):
             y1 = y1.cuda(gpu, non_blocking=True)
             y2 = y2.cuda(gpu, non_blocking=True)
+            idx = idx.cuda(gpu, non_blocking=True)
+
             adjust_learning_rate(args, optimizer, loader, step)
             optimizer.zero_grad()
             with torch.cuda.amp.autocast():
                 if args.method == "saclrall":
                     loss = model.forward(y1, y2, idx)
-                else:
+                elif args.method == "saclr1":
+                    loss = model.forward(y1, y2, idx)
+                elif args.method == "barlowtwins":
                     loss = model.forward(y1, y2)
+                else:
+                    raise ValueError("invalid method")
             scaler.scale(loss).backward()
             scaler.step(optimizer)
             scaler.update()
@@ -187,6 +205,7 @@ def main_worker(gpu, args):
             state = dict(epoch=epoch + 1, model=model.state_dict(),
                          optimizer=optimizer.state_dict())
             torch.save(state, args.checkpoint_dir / 'checkpoint.pth')
+            #torch.save(model.module.backbone.state_dict(), args.checkpoint_dir / 'resnet50.pth')
     if args.rank == 0:
         # save final model
         torch.save(model.module.backbone.state_dict(),
